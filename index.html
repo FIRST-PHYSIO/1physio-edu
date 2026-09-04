@@ -642,11 +642,11 @@ const BRAND = {
    ===================================================================== */
 
 /* ★ 암호 1 — 운영자 미리보기 (잠긴 글 전체 열람) ★ */
-const COLUMN_OWNER_PASSWORD  = "fp-owner-2026";
+const COLUMN_OWNER_PASSWORD  = "8377";
 /* ★ 암호 2 — 회원 공개 글 공통 암호 ★ */
-const COLUMN_MEMBER_PASSWORD = "1physio2026";
+const COLUMN_MEMBER_PASSWORD = "1physio";
 /* ★ 암호 3 — 글쓰기 페이지 진입 암호 ★ */
-const ADMIN_WRITE_PASSWORD   = "fp-write-2026";
+const ADMIN_WRITE_PASSWORD   = "7777";
 
 const COLUMN_INSTAGRAM = "https://instagram.com/1physio_2022";
 const COLUMN_HANDLE    = "@1physio_2022";
@@ -2195,7 +2195,7 @@ function postCard(p){
   "</a>";
 }
 
-const colFilters = { vis:"all", tag:"all", q:"" };
+const colFilters = { vis:"all", q:"" };
 
 function viewColumn(){
   return '<section class="sec sec--flush fade"><div class="wrap">' +
@@ -2216,8 +2216,7 @@ function viewColumn(){
       "칼럼은 회원 공개와 수강생 전용만 있습니다.<br>" +
       '회원 공개는 인스타 <a href="' + COLUMN_INSTAGRAM + '" target="_blank" rel="noopener">' + COLUMN_HANDLE + '</a> ' +
       "팔로우 후 댓글·DM으로 신청하면 암호를 보내드립니다.<br>" +
-      "수강생 전용은 해당 과정 수강생에게 따로 안내합니다.<br>" +
-      '<span class="small">팔로우·댓글·DM은 사이트에서 자동 확인하지 않습니다.</span>' +
+      "수강생 전용은 해당 과정 수강생에게 따로 안내합니다." +
     "</div>" +
     '<div id="ownerGate"></div>' +
     '<input class="input" id="cq" type="search" placeholder="제목 · 요약 · 태그 검색" style="max-width:360px;margin-top:24px">' +
@@ -2229,15 +2228,11 @@ function renderColumn(){
   const zone = $("#colzone");
   if(!zone) return;
   const pool = allPosts();
-  const tags = [];
-  pool.forEach(p => p.tags.forEach(t => { if(tags.indexOf(t) < 0) tags.push(t); }));
-
   const q = colFilters.q.trim().toLowerCase();
   const list = pool
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
     .filter(p =>
       (colFilters.vis === "all" || p.visibility === colFilters.vis) &&
-      (colFilters.tag === "all" || p.tags.indexOf(colFilters.tag) >= 0) &&
       (!q || (p.title + " " + p.summary + " " + p.tags.join(" ")).toLowerCase().includes(q))
     );
 
@@ -2246,11 +2241,6 @@ function renderColumn(){
       [["all", "전체"], ["member", "회원 공개"], ["alumni", "수강생 전용"]].map(([k, l]) =>
         '<button class="chip" data-cvis="' + k + '" aria-pressed="' + (colFilters.vis === k) + '">' + l + "</button>").join("") +
     "</div>" +
-    (tags.length ?
-      '<div class="chips" style="margin-bottom:16px">' +
-        '<button class="chip" data-ctag="all" aria-pressed="' + (colFilters.tag === "all") + '">태그 전체</button>' +
-        tags.map(t => '<button class="chip" data-ctag="' + esc(t) + '" aria-pressed="' + (colFilters.tag === t) + '">' + esc(t) + "</button>").join("") +
-      "</div>" : "") +
     '<p class="small" style="margin-bottom:14px">' + list.length + "개의 글" +
       (remoteState === "loading" ? " · 불러오는 중…" : "") + "</p>" +
     (list.length ? '<div class="posts">' + list.map(postCard).join("") + "</div>"
@@ -2387,7 +2377,7 @@ function renderWrite(){
       '<div class="field" id="wcoursewrap" hidden><label for="wcourse">과정 <span class="req">*</span></label>' +
         '<select id="wcourse" name="wcourse">' +
           '<option value="">선택</option>' +
-          COURSES.map(c => '<option value="' + c.slug + '">' + esc(c.name) + " " + esc(c.cohort) + "</option>").join("") +
+          COURSES.map(c => '<option value="' + c.slug + '">' + esc(c.name) + "</option>").join("") +
         "</select><p class=\"err\">과정을 선택해 주세요.</p></div>" +
 
       '<div class="field full"><label for="wpass">이 글 암호</label>' +
@@ -3090,9 +3080,6 @@ document.addEventListener("click", e => {
   const cv = e.target.closest("[data-cvis]");
   if(cv){ colFilters.vis = cv.dataset.cvis; renderColumn(); return; }
 
-  const ct = e.target.closest("[data-ctag]");
-  if(ct){ colFilters.tag = (colFilters.tag === ct.dataset.ctag ? "all" : ct.dataset.ctag); renderColumn(); return; }
-
   /* 운영자 미리보기 토글 */
   if(e.target.closest("#ownerBtn")){
     const box = $("#ownerGate");
@@ -3230,7 +3217,7 @@ document.addEventListener("submit", e => {
         password: payload.password, body: body
       });
       if(local) LOCAL_POSTS = LOCAL_POSTS.concat([local]);
-      colFilters.vis = "all"; colFilters.tag = "all"; colFilters.q = "";
+      colFilters.vis = "all"; colFilters.q = "";
       location.hash = "#/column";
     }).catch(() => {
       if(wbtn){ wbtn.disabled = false; wbtn.textContent = "저장하고 올리기"; }
