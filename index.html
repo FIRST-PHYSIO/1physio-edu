@@ -525,7 +525,7 @@ button{font:inherit;color:inherit}
           <li><a href="https://instagram.com/1physio_2022" target="_blank" rel="noopener">Instagram @1physio_2022</a></li>
           <li><a href="https://www.youtube.com/@1physio" target="_blank" rel="noopener">YouTube 퍼스트피지오</a></li>
           <li><a href="https://1physio.kr" target="_blank" rel="noopener">센터 바로가기 (1physio.kr)</a></li>
-          <li><a href="mailto:hongwoongpyo@naver.com">hongwoongpyo@naver.com</a></li>
+          <li><a href="mailto:hongwoongpyo1@gmail.com">hongwoongpyo1@gmail.com</a></li>
         </ul>
       </div>
     </div>
@@ -551,7 +551,7 @@ const BRAND = {
   sloganKo: "진짜 건강을 위한, 본질을 알립니다",
   sloganEdu: "보통 물리치료사에서 진짜 물리치료사로",
   mission: "올바른 지식과 정석 운동을 임상가에게 전달해, 그 지식이 일반인에게 가닿게 합니다.",
-  email: "hongwoongpyo@naver.com",
+  email: "hongwoongpyo1@gmail.com",
   instagram: "https://instagram.com/1physio_2022",
   gym: "https://1physio.kr"
 };
@@ -1213,7 +1213,7 @@ const SITE_FAQ = [
   { q:"신청과 결제는 어떤 순서로 진행되나요?",
     a:"신청서 작성 → 접수 확인 연락(영업일 기준 1일 이내) → 수강료 입금 → 확정 안내 순입니다. 신청 단계에서 바로 결제되지 않으므로, 확인 연락을 받으신 뒤 입금하시면 됩니다. 정원이 찬 경우 대기 순번을 함께 안내드립니다." },
   { q:"신청했는데 연락이 없으면 어떻게 하나요?",
-    a:"접수 완료 화면의 신청번호를 남겨 hongwoongpyo@naver.com 또는 인스타그램 DM으로 문의해 주세요. 접수 확인 연락은 영업일 기준 1일 이내에 드립니다." },
+    a:"접수 완료 화면의 신청번호를 남겨 hongwoongpyo1@gmail.com 또는 인스타그램 DM으로 문의해 주세요. 접수 확인 연락은 영업일 기준 1일 이내에 드립니다." },
   { q:"수료하면 자격증이 나오나요?",
     a:"국가 자격이나 면허가 아닌, 과정 수료를 확인하는 수료증을 발급합니다. 의료 행위나 치료 효과를 보증하는 증서가 아닙니다." },
   { q:"단체·기관 교육도 가능한가요?",
@@ -2054,14 +2054,13 @@ function viewContact(){
     "</div>" +
     '<div class="dbox">' +
       '<h2 class="h-s">간단 문의</h2>' +
-      '<p class="small" style="margin-top:6px">과정 신청은 <a href="#/apply" data-link>신청 페이지</a>를 이용해 주세요.</p>' +
+      '<p class="small" style="margin-top:6px">과정 신청은 <a href="#/apply" data-link>신청 페이지</a>를 이용해 주세요. ' + SUBMIT.replyHours + ' 회신드립니다.</p>' +
       '<form class="form" id="contactForm" novalidate style="margin-top:16px;grid-template-columns:1fr">' +
         field("cname", "성함", "text", true) +
         field("cemail", "이메일", "email", true) +
         '<div class="field full"><label for="cmsg">문의 내용 <span class="req">*</span></label>' +
         '<textarea id="cmsg" name="cmsg" required></textarea><p class="err">문의 내용을 입력해 주세요.</p></div>' +
         '<div class="full"><button class="btn btn--primary btn--block" type="submit">문의 보내기</button></div>' +
-        '<p class="hint full">전송 연동 전 단계입니다. 현재는 입력값 검증만 동작합니다.</p>' +
       "</form>" +
       '<div id="contactOk"></div>' +
     "</div>" +
@@ -2077,12 +2076,23 @@ function field(id, label, type, req, extra){
 /* =====================================================================
    APPLY
    ===================================================================== */
-/* ---- 신청 접수 설정 : 이 객체만 바꾸면 실제 접수로 전환됩니다 ---- */
+/* =====================================================================
+   접수 설정 — 배포 시 appsScriptUrl 만 채우면 실제 접수로 전환됩니다
+   ===================================================================== */
 const SUBMIT = {
-  mode: "demo",              /* "demo" | "appsscript" | "mailto" */
-  appsScriptUrl: "",         /* Google Apps Script 웹앱 URL (시트에 기록) */
-  fallbackFormUrl: "",       /* 연동 전 대체용 구글폼 주소 */
-  bank: { name:"OO은행", account:"000-0000-000000", holder:"주식회사 퍼스트피지오" },
+  mode: "appsscript",
+
+  /* Google Apps Script 웹앱 (hongwoongpyo1@gmail.com 계정 배포)
+     재배포해서 URL이 바뀌면 이 줄만 교체하세요. */
+  appsScriptUrl: "https://script.google.com/macros/s/AKfycbxb_OH78H0MVoB9pcQtmCEOrkKMn_D09SpmHL-60t07T-qJC3rL2vF5LgkbasJEqRO2/exec",
+
+  fallbackFormUrl: "",
+  adminEmail: "hongwoongpyo1@gmail.com",
+  bank: {
+    name: "기업은행",
+    account: "497-068950-01-012",
+    holder: "주식회사 퍼스트피지오"
+  },
   replyHours: "영업일 기준 1일 이내"
 };
 
@@ -2093,22 +2103,54 @@ function applyNo(){
     String(Math.floor(Math.random() * 9000) + 1000);
 }
 
+/* 폼 내용을 사람이 읽는 텍스트로 (메일 폴백 · 복사 버튼 공용) */
+function payloadText(payload){
+  return Object.entries(payload)
+    .filter(([, v]) => v !== "" && v != null)
+    .map(([k, v]) => k + ": " + v).join("\n");
+}
+
+/* 접수 전송.
+   성공하면 {ok:true}, 앱스스크립트 URL이 없어 메일앱으로 넘긴 경우 {ok:true, fallback:true} */
 async function sendApplication(payload){
-  if(SUBMIT.mode === "appsscript" && SUBMIT.appsScriptUrl){
-    await fetch(SUBMIT.appsScriptUrl, {
-      method:"POST", mode:"no-cors",
-      headers:{ "Content-Type":"text/plain;charset=utf-8" },
-      body:JSON.stringify(payload)
-    });
-    return true;
+  const url = (SUBMIT.appsScriptUrl || "").trim();
+
+  if(url){
+    try {
+      await fetch(url, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      return { ok: true };
+    } catch (err) {
+      /* 네트워크 문제로 전송이 안 되면 접수를 잃지 않도록 메일 앱으로 넘깁니다 */
+      return mailtoFallback(payload);
+    }
   }
-  if(SUBMIT.mode === "mailto"){
-    const body = Object.entries(payload).map(([k, v]) => k + ": " + v).join("\n");
-    location.href = "mailto:" + BRAND.email + "?subject=" +
-      encodeURIComponent("[수강신청] " + (payload.course || "")) + "&body=" + encodeURIComponent(body);
-    return true;
+  return mailtoFallback(payload);
+}
+
+/* 연동 전 · 전송 실패 시 폴백 — 메일 앱으로 넘깁니다 */
+function mailtoFallback(payload){
+  if(SUBMIT.fallbackFormUrl){
+    window.open(SUBMIT.fallbackFormUrl, "_blank", "noopener");
+    return { ok: true, fallback: true };
   }
-  return true; /* demo */
+  const subject = "[" + (payload.유형 || "문의") + "] " +
+    (payload.과정 || "") + " / " + (payload.성함 || payload.이메일 || "");
+  location.href = "mailto:" + SUBMIT.adminEmail +
+    "?subject=" + encodeURIComponent(subject) +
+    "&body=" + encodeURIComponent(payloadText(payload));
+  return { ok: true, fallback: true };
+}
+
+function fallbackNote(){
+  return '<p class="small" style="color:inherit;margin-top:12px">' +
+    "메일 앱이 열립니다. 보내지 않으셨으면 " +
+    '<a href="mailto:' + SUBMIT.adminEmail + '" style="color:inherit;font-weight:600">' +
+    SUBMIT.adminEmail + "</a> 으로 직접 보내 주세요.</p>";
 }
 
 function renderApplySummary(){
@@ -2171,7 +2213,7 @@ function viewApply(preselect){
             .map(o => "<option>" + o + "</option>").join("") +
         "</select><p class=\"err\">직종을 선택해 주세요.</p></div>" +
       field("alicense", "면허·자격 번호 또는 소속", "text", true) +
-      field("aphone", "연락처 (휴대전화)", "tel", true) +
+      field("aphone", "휴대폰 번호", "tel", true) +
       field("aemail", "이메일", "email", true) +
       '<div class="field"><label for="acourse">신청 과정 <span class="req">*</span></label>' +
         '<select id="acourse" name="acourse" required><option value="">과정을 선택해 주세요</option>' + opts + "</select>" +
@@ -2181,14 +2223,13 @@ function viewApply(preselect){
       '<div class="field full" id="agreeField">' +
         '<label style="display:flex;gap:9px;align-items:flex-start;font-weight:400;font-size:13.5px">' +
           '<input id="aagree" name="aagree" type="checkbox" required style="width:auto;margin-top:3px">' +
-          "<span>수강 신청 확인 및 안내를 위한 개인정보 수집·이용에 동의합니다. (수집 항목: 성함, 직종, 면허·소속, 연락처, 이메일 / 보유 기간: 교육 종료 후 1년)</span>" +
+          "<span>수강 신청 확인과 개강 안내를 메일·문자로 받는 데 동의합니다. (수집 항목: 성함, 직종, 면허·소속, 휴대폰 번호, 이메일 / 이용 목적: 접수 확인, 입금 안내, 개강 리마인더 / 보유 기간: 교육 종료 후 1년)</span>" +
         "</label><p class=\"err\">개인정보 수집·이용 동의가 필요합니다.</p></div>" +
       '<div class="full" style="display:flex;gap:10px;flex-wrap:wrap">' +
         '<button class="btn btn--accent" type="submit">신청서 제출</button>' +
         '<a class="btn btn--ghost" href="#/courses" data-link>과정 다시 보기</a>' +
       "</div>" +
-      '<p class="hint full">제출 즉시 결제되지 않습니다. 접수 확인 후 입금 안내를 드립니다.' +
-        (SUBMIT.mode === "demo" ? " (현재 데모 모드 — 접수처 연동 전)" : "") + "</p>" +
+      '<p class="hint full">제출 즉시 결제되지 않습니다. 접수 확인 후 입금 안내를 드립니다.</p>' +
     "</form>" +
     '<div id="applyOk"></div>' +
     "</div>" +
@@ -2266,6 +2307,7 @@ function render(){
   });
   $("#mnav").classList.remove("is-open");
   $("#burger").setAttribute("aria-expanded", "false");
+  closeNotify();   /* 페이지 이동 시 열려 있던 알림 모달 닫기 */
   window.scrollTo({ top:0, behavior:"auto" });
   document.title = titleFor(seg, parts[1]);
 }
@@ -2283,21 +2325,31 @@ function titleFor(seg, sub){
    ===================================================================== */
 function openNotify(slug){
   const c = slug ? byslug(slug) : null;
+  const label = c ? esc(c.name) + " " + esc(c.cohort) : "신규 과정";
   const ov = $("#ov"), sheet = $("#sheet");
   sheet.innerHTML =
     '<div class="sheet__hd"><div>' +
       '<p class="eyebrow">Open alert</p>' +
       '<h2 class="h-m" id="ovt" style="margin-top:8px">오픈 알림 신청</h2>' +
-      '<p class="small" style="margin-top:6px">' + (c ? esc(c.name) + " " + esc(c.cohort) : "신규 과정") + " 모집이 시작되면 가장 먼저 안내드립니다.</p>" +
+      '<p class="small" style="margin-top:6px">' + label + " 모집이 시작되면 가장 먼저 안내드립니다.</p>" +
     "</div><button class=\"x\" id=\"ovx\" aria-label=\"닫기\">✕</button></div>" +
     '<form id="notifyForm" data-course="' + esc(slug || "") + '" novalidate class="form" style="grid-template-columns:1fr">' +
+      field("nname", "성함", "text", false) +
       field("nemail", "이메일", "email", true) +
+      field("nphone", "휴대폰 번호", "tel", true) +
+      '<div class="field full">' +
+        '<label style="display:flex;gap:9px;align-items:flex-start;font-weight:400;font-size:13.5px">' +
+          '<input id="nagree" name="nagree" type="checkbox" required style="width:auto;margin-top:3px">' +
+          "<span>모집 안내를 메일과 문자로 받는 데 동의합니다. " +
+          "(수집 항목: 이메일, 휴대폰 번호, 성함 / 이용 목적: 해당 과정 모집·개강 안내 / " +
+          "보유 기간: 해당 과정 종료 후 1년, 수신거부 시 즉시 삭제)</span>" +
+        "</label><p class=\"err\">동의가 필요합니다.</p></div>" +
       '<div class="full"><button class="btn btn--accent btn--block" type="submit">알림 신청</button></div>' +
-      '<p class="hint full">이메일 주소만 수집하며, 해당 과정 모집 안내 외의 목적으로 사용하지 않습니다.</p>' +
+      '<p class="hint full">이메일과 휴대폰 번호만 수집하며, 해당 과정 모집 안내 외의 목적으로 사용하지 않습니다.</p>' +
     "</form><div id=\"notifyOk\"></div>";
   ov.hidden = false;
   ov.classList.add("is-open");
-  $("#nemail").focus();
+  $("#nname").focus();
 }
 function closeNotify(){
   const ov = $("#ov");
@@ -2309,19 +2361,39 @@ function closeNotify(){
    VALIDATION
    ===================================================================== */
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const RE_PHONE = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
+const RE_PHONE = /^01[016789]-\d{3,4}-\d{4}$/;
+
+/* 숫자만 입력해도 010-0000-0000 형태로 */
+function formatPhone(v){
+  const n = (v || "").replace(/[^0-9]/g, "").slice(0, 11);
+  if(n.length < 4) return n;
+  if(n.length < 8) return n.slice(0, 3) + "-" + n.slice(3);
+  if(n.length === 10) return n.slice(0, 3) + "-" + n.slice(3, 6) + "-" + n.slice(6);
+  return n.slice(0, 3) + "-" + n.slice(3, 7) + "-" + n.slice(7);
+}
 
 function validate(form){
   let ok = true, first = null;
   $$(".field", form).forEach(f => {
     const el = $("input,select,textarea", f);
     if(!el) return;
-    let bad = false;
+    const errEl = $(".err", f);
+    const label = (($("label", f) || {}).textContent || "").replace("*", "").trim();
     const v = (el.value || "").trim();
-    if(el.type === "checkbox") bad = el.required && !el.checked;
-    else if(el.required && !v) bad = true;
-    else if(el.type === "email" && v && !RE_EMAIL.test(v)) bad = true;
-    else if(el.type === "tel" && v && !RE_PHONE.test(v.replace(/\s/g, ""))) bad = true;
+    let bad = false, msg = "";
+
+    if(el.type === "checkbox"){
+      if(el.required && !el.checked){ bad = true; msg = "동의가 필요합니다."; }
+    } else if(el.required && !v){
+      bad = true;
+      msg = el.tagName === "SELECT" ? label + "을(를) 선택해 주세요." : label + "을(를) 입력해 주세요.";
+    } else if(el.type === "email" && v && !RE_EMAIL.test(v)){
+      bad = true; msg = "이메일 형식이 올바르지 않습니다. 예) name@example.com";
+    } else if(el.type === "tel" && v && !RE_PHONE.test(v)){
+      bad = true; msg = "휴대폰 번호를 010-0000-0000 형식으로 입력해 주세요.";
+    }
+
+    if(errEl && msg) errEl.textContent = msg;
     f.classList.toggle("is-bad", bad);
     if(bad){ ok = false; if(!first) first = el; }
   });
@@ -2379,6 +2451,12 @@ document.addEventListener("click", e => {
 
 document.addEventListener("input", e => {
   if(e.target.id === "q"){ filters.q = e.target.value; renderResults(); }
+  if(e.target.type === "tel"){
+    const pos = e.target.value.length - e.target.selectionStart;
+    e.target.value = formatPhone(e.target.value);
+    const at = Math.max(0, e.target.value.length - pos);
+    try { e.target.setSelectionRange(at, at); } catch(_){}
+  }
 });
 
 document.addEventListener("change", e => {
@@ -2391,29 +2469,61 @@ document.addEventListener("submit", e => {
   e.preventDefault();
   if(!validate(form)) return;
 
+  const btn = $("button[type=submit]", form);
+  const btnText = btn ? btn.textContent : "";
+  const busy = () => { if(btn){ btn.disabled = true; btn.textContent = "접수 중…"; } };
+  const idle = () => { if(btn){ btn.disabled = false; btn.textContent = btnText; } };
+  const failBox = target => {
+    idle();
+    $(target).innerHTML =
+      '<div class="notice" style="margin-top:16px;border-color:var(--clay);color:var(--clay)">' +
+        "접수 중 문제가 발생했습니다. 잠시 후 다시 시도하시거나 " +
+        '<a href="mailto:' + SUBMIT.adminEmail + '">' + SUBMIT.adminEmail + "</a> 으로 직접 보내 주세요.</div>";
+  };
+
+  /* ---------------- 수강 신청 ---------------- */
   if(form.id === "applyForm"){
     const c = byslug($("#acourse").value);
     const no = applyNo();
+    const name = $("#aname").value.trim();
+    const payer = name + " " + no.slice(-4);
     const payload = {
+      유형: "수강신청",
       신청번호: no,
-      성함: $("#aname").value.trim(),
+      성함: name,
       직종: $("#ajob").value,
       "면허·소속": $("#alicense").value.trim(),
-      연락처: $("#aphone").value.trim(),
+      휴대폰: $("#aphone").value.trim(),
       이메일: $("#aemail").value.trim(),
-      과정: c ? c.name + " " + c.cohort : "",
-      개강: c ? c.start : "",
+      과정: c ? c.name : "",
+      기수: c ? c.cohort : "",
+      과정slug: c ? c.slug : "",
+      교육일: c ? (c.sessions ? c.sessions.join(" · ") : (c.dateNote || c.start)) : "",
       수강료: c ? won(c.price) : "",
+      입금자명: (c && c.price === 0) ? "" : payer,
       메모: $("#amemo").value.trim(),
       접수시각: new Date().toLocaleString("ko-KR")
     };
-    const btn = $("button[type=submit]", form);
-    btn.disabled = true;
-    btn.textContent = "접수 중…";
+    busy();
 
-    sendApplication(payload).then(() => {
-      const summary = Object.entries(payload)
-        .filter(([, v]) => v).map(([k, v]) => k + ": " + v).join("\n");
+    sendApplication(payload).then(res => {
+      const copyLines = [
+        "[퍼스트피지오 교육 수강신청]",
+        "신청번호: " + no,
+        "성함: " + name,
+        "과정: " + (c ? c.name + " " + c.cohort : ""),
+        "교육일: " + (c ? sessionLabel(c) : ""),
+        "수강료: " + (c ? won(c.price) : "")
+      ];
+      if(!(c && c.price === 0)){
+        copyLines.push(
+          "입금 계좌: " + SUBMIT.bank.name + " " + SUBMIT.bank.account,
+          "예금주: " + SUBMIT.bank.holder,
+          "입금자명: " + payer
+        );
+      }
+      copyLines.push("연락처: " + payload.휴대폰 + " / " + payload.이메일);
+
       form.style.display = "none";
       $("#applyOk").innerHTML =
         '<div class="ok fade" role="status">' +
@@ -2423,52 +2533,71 @@ document.addEventListener("submit", e => {
           '<dl class="dl" style="margin-top:16px;padding-top:14px;border-top:1px solid currentColor">' +
             (c ? "<dt>과정</dt><dd>" + esc(c.name) + " " + esc(c.cohort) + "</dd>" +
                  (c.track === "global" ? "<dt>일정</dt><dd>확인 연락 시 조율</dd>"
-                                       : "<dt>교육일</dt><dd>" + fdate(c.start) + "</dd>") +
+                                       : "<dt>교육일</dt><dd>" + sessionLabel(c) + "</dd>") +
                  "<dt>수강료</dt><dd>" + won(c.price) + "</dd>" : "") +
             (c && c.price === 0 ? "" :
-              "<dt>입금 계좌</dt><dd>" + SUBMIT.bank.name + " " + SUBMIT.bank.account + " (" + SUBMIT.bank.holder + ")</dd>" +
-              "<dt>입금자명</dt><dd>" + (payload.성함 || "신청자명") + " " + no.slice(-4) + "</dd>") +
+              "<dt>입금 계좌</dt><dd>" + SUBMIT.bank.name + " " + SUBMIT.bank.account +
+                " (" + SUBMIT.bank.holder + ")</dd>" +
+              "<dt>입금자명</dt><dd>" + esc(payer) + "</dd>") +
           "</dl>" +
           '<p class="small" style="color:inherit;margin-top:14px">' + SUBMIT.replyHours +
             " 접수 확인 연락을 드립니다. 입금은 확인 연락을 받으신 뒤에 하셔도 됩니다.</p>" +
+          (res && res.fallback ? fallbackNote() : "") +
           '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">' +
             '<button class="btn btn--accent btn--sm" id="copyApply" type="button">신청 내용 복사</button>' +
             '<a class="btn btn--ghost btn--sm" href="#/courses" data-link>다른 과정 보기</a>' +
           "</div>" +
-          '<textarea id="applyText" readonly class="sr-only">' + esc(summary) + "</textarea>" +
-          (SUBMIT.mode === "demo"
-            ? '<p class="small" style="color:inherit;margin-top:14px;opacity:.75">※ 데모 모드입니다. 실제로는 이 시점에 접수 데이터가 시트로 전송되고 확인 메일이 나갑니다.</p>'
-            : "") +
+          '<textarea id="applyText" readonly class="sr-only">' + esc(copyLines.join("\n")) + "</textarea>" +
         "</div>";
       $("#applyOk").scrollIntoView({ behavior:"smooth", block:"center" });
-    }).catch(() => {
-      btn.disabled = false;
-      btn.textContent = "신청서 제출";
-      $("#applyOk").innerHTML =
-        '<div class="notice" style="margin-top:16px;border-color:var(--clay);color:var(--clay)">' +
-          "접수 중 문제가 발생했습니다. 잠시 후 다시 시도하시거나 " +
-          '<a href="mailto:' + BRAND.email + '">' + BRAND.email + "</a> 로 보내 주세요.</div>";
-    });
+    }).catch(() => failBox("#applyOk"));
   }
+
+  /* ---------------- 과정 문의 ---------------- */
   else if(form.id === "contactForm"){
-    form.style.display = "none";
-    $("#contactOk").innerHTML = successBox("문의가 접수되었습니다 (데모)", ["연동 후에는 담당자 메일로 전달됩니다."]);
+    const payload = {
+      유형: "문의",
+      성함: $("#cname").value.trim(),
+      이메일: $("#cemail").value.trim(),
+      메모: $("#cmsg").value.trim(),
+      접수시각: new Date().toLocaleString("ko-KR")
+    };
+    busy();
+    sendApplication(payload).then(res => {
+      form.style.display = "none";
+      $("#contactOk").innerHTML = successBox("문의가 접수되었습니다", [
+        SUBMIT.replyHours + " 남겨주신 메일로 회신드립니다.",
+        res && res.fallback ? "메일 앱이 열립니다. 보내지 않으셨으면 " + SUBMIT.adminEmail + " 으로 직접 보내 주세요." : ""
+      ].filter(Boolean));
+    }).catch(() => failBox("#contactOk"));
   }
+
+  /* ---------------- 오픈 알림 ---------------- */
   else if(form.id === "notifyForm"){
     const slug = form.dataset.course || "";
     const c = slug ? byslug(slug) : null;
-    sendApplication({
+    const email = $("#nemail").value.trim();
+    const phone = $("#nphone").value.trim();
+    const payload = {
       유형: "오픈알림",
+      성함: $("#nname").value.trim(),
+      이메일: email,
+      휴대폰: phone,
       과정: c ? c.name : "신규 과정 전체",
-      이메일: $("#nemail").value.trim(),
+      기수: c ? c.cohort : "",
+      과정slug: slug,
+      교육일: c ? (c.dateNote || c.start) : "",
       접수시각: new Date().toLocaleString("ko-KR")
-    }).then(() => {
+    };
+    busy();
+    sendApplication(payload).then(res => {
       form.style.display = "none";
       $("#notifyOk").innerHTML = successBox("알림 신청 완료", [
-        (c ? esc(c.name) + " " : "") + "모집이 시작되면 입력하신 메일로 안내드립니다.",
-        "수집 항목은 이메일 주소 하나이고, 해당 과정 모집 안내 외에는 사용하지 않습니다."
-      ]);
-    });
+        (c ? esc(c.name) + " " : "") + "모집이 시작되면 입력하신 메일 또는 문자로 안내드립니다.",
+        "남기신 연락처 — " + esc(email) + " / " + esc(phone),
+        res && res.fallback ? "메일 앱이 열립니다. 보내지 않으셨으면 " + SUBMIT.adminEmail + " 으로 직접 보내 주세요." : ""
+      ].filter(Boolean));
+    }).catch(() => failBox("#notifyOk"));
   }
 });
 
