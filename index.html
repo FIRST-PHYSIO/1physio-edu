@@ -867,6 +867,14 @@ const GEAR = [
   }
 ];
 
+/* ---------------------------------------------------------------------
+   과정 일정·가격 확정값 — Apps Script 없이도 동작합니다.
+   관리자 화면(#/admin/courses)의 "index.html 용 코드 내보내기" 버튼이
+   만들어 주는 내용을 이 한 줄에 통째로 덮어쓰면 됩니다.
+   시트(과정마스터)가 연결되어 있으면 시트 값이 우선합니다.
+   --------------------------------------------------------------------- */
+const COURSE_FIXED = {};
+
 const TRACKS = {
   edu:   { key:"edu",   label:"PHYSIO EDU",  ko:"임상·재활 교육",
            desc:"통증과 손상을 평가하고, 운동으로 다시 세우는 임상 트랙. 근골격계·스포츠재활·교정운동·BFR·관절염까지 임상가의 판단 근거를 다룹니다." },
@@ -2602,6 +2610,8 @@ function setNoindex(on){
 })();
 
 let COURSE_OVERRIDES = {};
+/* 시트 연결 여부와 무관하게, 파일에 박아 둔 확정값을 먼저 적용합니다 */
+setTimeout(() => { try { applyOverrides(); render(); } catch(e){} }, 0);
 let cmState = "idle";   /* idle | loading | done | fail */
 let cmInfo  = "";       /* 관리자 화면에 보여줄 연결 상태 */
 let cmFix   = "";       /* "" | reach | old | empty — 무엇을 고쳐야 하는지 */
@@ -2646,8 +2656,9 @@ function askScript(type, cb, overrideUrl){
 
 function applyOverrides(){
   COURSES.forEach(c => {
-    const o = COURSE_OVERRIDES[c.slug];
-    if(!o) return;
+    /* index.html 에 박아 둔 확정값 → 시트 값 순으로 덮어씁니다 */
+    const o = Object.assign({}, COURSE_FIXED[c.slug] || {}, COURSE_OVERRIDES[c.slug] || {});
+    if(!Object.keys(o).length) return;
     if(o.cohort)   c.cohort = String(o.cohort);
     if(o.status && STATUS[o.status]) c.status = o.status;
     if(o.place)    c.place = String(o.place);
@@ -2790,6 +2801,16 @@ function renderAdmin(){
         "</div>" +
       "</form>" +
       '<div id="urlResult">' + urlMsg + "</div>" +
+    "</div>" +
+    '<div class="urltool">' +
+      '<p class="urltool__t">Apps Script 없이 반영하기</p>' +
+      '<p class="small" style="margin:6px 0 12px">' +
+        "아래 버튼을 누르면 지금 화면의 모든 과정 값을 한 줄짜리 코드로 만들어 줍니다.<br>" +
+        "index.html 에서 <code>const COURSE_FIXED = {};</code> 를 찾아 그 줄을 통째로 바꾸고 깃허브에 올리면, " +
+        "<strong>구글 연동 없이도 모든 방문자에게 그대로 보입니다.</strong>" +
+      "</p>" +
+      '<button class="btn btn--accent btn--sm" id="exportBtn" type="button">index.html 용 코드 내보내기</button>' +
+      '<div id="exportResult"></div>' +
     "</div>";
 
   zone.innerHTML = urlTool +
@@ -3565,6 +3586,43 @@ document.addEventListener("click", e => {
     document.body.removeChild(ta);
     const t = cp.textContent; cp.textContent = "복사됨";
     setTimeout(() => { cp.textContent = t; }, 1600);
+    return;
+  }
+
+  if(e.target.closest("#exportBtn")){
+    const obj = {};
+    COURSES.forEach(c => {
+      obj[c.slug] = {
+        cohort: c.cohort,
+        status: c.status,
+        start: c.dateNote ? "" : (c.start || ""),
+        end: c.dateNote ? "" : (c.end || ""),
+        place: c.place,
+        capacity: String(c.capacity),
+        price: String(c.price == null ? "" : c.price),
+        earlybird: c.earlybird === false ? "off" : "on"
+      };
+    });
+    const line = "const COURSE_FIXED = " + JSON.stringify(obj) + ";";
+    $("#exportResult").innerHTML =
+      '<p class="urlmsg urlmsg--ok">아래 내용을 복사해서 index.html 의 ' +
+        "<code>const COURSE_FIXED = {};</code> 줄을 통째로 바꿔 주세요.</p>" +
+      '<textarea class="input" id="exportText" readonly rows="6" ' +
+        'style="margin-top:10px;font-family:\'IBM Plex Mono\',monospace;font-size:11.5px;line-height:1.6">' +
+        esc(line) + "</textarea>" +
+      '<div style="margin-top:8px"><button class="btn btn--ghost btn--sm" id="exportCopy" type="button">전체 복사</button></div>';
+    return;
+  }
+
+  if(e.target.closest("#exportCopy")){
+    const ta = $("#exportText");
+    if(ta){
+      ta.select(); ta.setSelectionRange(0, 999999);
+      try { document.execCommand("copy"); } catch(err){}
+      const btn = e.target.closest("#exportCopy");
+      btn.textContent = "복사됨";
+      setTimeout(() => { btn.textContent = "전체 복사"; }, 1600);
+    }
     return;
   }
 
