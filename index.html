@@ -2578,6 +2578,7 @@ let COURSE_OVERRIDES = {};
 let cmState = "idle";   /* idle | loading | done | fail */
 let cmInfo  = "";       /* 관리자 화면에 보여줄 연결 상태 */
 let cmFix   = "";       /* "" | reach | old | empty — 무엇을 고쳐야 하는지 */
+let cmRaw   = "";       /* 실제로 돌아온 응답 (진단용) */
 
 /* ---------------------------------------------------------------------
    Apps Script 읽기 — 브라우저 CORS 때문에 fetch 가 막히는 경우가 있어
@@ -2589,6 +2590,7 @@ function askScript(type, cb){
 
   const name = "fpcb_" + Math.random().toString(36).slice(2);
   const sep  = url.indexOf("?") < 0 ? "?" : "&";
+  const bust = "&_=" + Date.now();   /* 예전 응답이 캐시되어 돌아오는 것을 막습니다 */
   const tag  = document.createElement("script");
   let done = false;
 
@@ -2598,7 +2600,8 @@ function askScript(type, cb){
   };
   const fallback = err => {
     /* JSONP 실패 → 일반 fetch 로 한 번 더 */
-    fetch(url + sep + "type=" + encodeURIComponent(type), { method:"GET" })
+    fetch(url + sep + "type=" + encodeURIComponent(type) + bust,
+          { method:"GET", cache:"no-store" })
       .then(r => r.json())
       .then(d => cb(d, ""))
       .catch(e => cb(null, err || String(e)));
@@ -2606,7 +2609,7 @@ function askScript(type, cb){
 
   window[name] = data => { done = true; cleanup(); cb(data, ""); };
   tag.referrerPolicy = "no-referrer-when-downgrade";
-  tag.src = url + sep + "type=" + encodeURIComponent(type) + "&callback=" + name;
+  tag.src = url + sep + "type=" + encodeURIComponent(type) + "&callback=" + name + bust;
   tag.onerror = () => { if(!done){ cleanup(); fallback("스크립트를 불러오지 못했습니다"); } };
   document.head.appendChild(tag);
 
@@ -2653,6 +2656,7 @@ function loadCourseMaster(force){
     } else if(!d.items){
       cmState = "fail";
       cmFix = "old";
+      cmRaw = JSON.stringify(d).slice(0, 300);
       cmInfo = "연결은 됐지만 예전 버전이 배포되어 있습니다. (과정 목록을 돌려주지 않음)";
     } else if(!d.items.length){
       cmState = "fail";
@@ -2751,8 +2755,17 @@ function renderAdmin(){
           ? "Apps Script 편집기에서 함수 목록을 <strong>setup</strong> 으로 바꾸고 <strong>실행</strong>을 한 번 눌러 주세요. " +
             "과정마스터 탭에 12개 과정이 채워집니다."
           : cmFix === "old"
-            ? "최신 Code.gs 를 붙여넣은 뒤 <strong>배포 &gt; 배포 관리 &gt; 연필(수정) &gt; 버전: 새 버전 &gt; 배포</strong> 를 눌러 주세요. " +
-              "여기서 <strong>새 배포</strong>를 누르면 주소가 바뀌어 반영되지 않습니다."
+            ? "Apps Script 에 <strong>예전 코드</strong>가 살아 있습니다. 아래 순서대로 해 주세요.<br><br>" +
+              "① 편집기에서 <strong>Ctrl+A → 최신 Code.gs 붙여넣기 → Ctrl+S (저장)</strong><br>" +
+              "&nbsp;&nbsp;&nbsp;저장 안 하고 배포하면 예전 코드가 그대로 나갑니다.<br>" +
+              "② 편집기에서 <code>doGet</code> 을 찾아 <strong>function doGet(e)</strong> 인지 확인 " +
+              "(<code>function doGet()</code> 이면 예전 코드입니다)<br>" +
+              "③ <strong>배포 &gt; 배포 관리</strong> → 목록에 배포가 여러 개면 " +
+              "아래 주소와 <strong>같은 ID</strong> 를 가진 것을 고르세요<br>" +
+              "④ 연필(수정) → <strong>버전: 새 버전</strong> → 배포 " +
+              "(<strong>새 배포</strong>는 주소가 바뀝니다)<br>" +
+              "⑤ 함수 목록에서 <strong>setup</strong> 실행<br><br>" +
+              "지금 돌아온 응답: <code>" + esc(cmRaw || "-") + "</code>"
             : "확인할 것 세 가지입니다.<br>" +
               "① 아래 주소를 눌러 <code>{\"ok\":true,\"items\":[…]}</code> 가 보이는지<br>" +
               "② 배포 설정에서 <strong>액세스 권한이 있는 사용자 = 모든 사용자</strong> 인지<br>" +
