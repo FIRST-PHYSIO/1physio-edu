@@ -296,6 +296,25 @@ button{font:inherit;color:inherit}
   color:var(--accent-2);font-size:13px;font-weight:600;margin-bottom:16px;
 }
 .cmbar--bad{background:var(--clay-soft);color:var(--clay)}
+.urltool{
+  border:1px solid var(--line);background:var(--surface);border-radius:var(--r);
+  padding:20px;margin-bottom:16px;
+}
+.urltool__t{font-size:15px;font-weight:700;letter-spacing:-.02em;margin:0}
+.urltool__row{display:flex;gap:8px;flex-wrap:wrap}
+.urltool__row .input{flex:1 1 320px;font-family:"IBM Plex Mono",monospace;font-size:12.5px}
+.urltool__code{
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;
+  padding:12px 14px;border:1px dashed var(--line-strong);border-radius:var(--r-sm);background:var(--paper);
+}
+.urltool__code code{
+  font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--accent-2);
+  word-break:break-all;flex:1 1 240px;
+}
+.urlmsg{font-size:13.5px;font-weight:600;margin:14px 0 0;color:var(--ink-2)}
+.urlmsg--ok{color:var(--accent-2)}
+.urlmsg--bad{color:var(--clay)}
+.urlmsg__raw{font-size:11.5px;color:var(--muted);margin:8px 0 0;word-break:break-all}
 
 /* ================= 추천 장비 ================= */
 .gears{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
@@ -2574,19 +2593,28 @@ function setNoindex(on){
    사이트를 열 때 doGet(?type=courses) 으로 다시 읽어 COURSES 를 덮어씁니다.
    개강일을 저장하면 얼리버드 마감일(개강 1개월 전날)이 자동으로 다시 계산됩니다.
    ===================================================================== */
+/* 관리자가 화면에서 테스트해 저장한 주소가 있으면 그것을 먼저 씁니다 */
+(function(){
+  try {
+    const saved = localStorage.getItem("fp_gs_url");
+    if(saved && saved.indexOf("script.google.com") >= 0) SUBMIT.appsScriptUrl = saved;
+  } catch(e){}
+})();
+
 let COURSE_OVERRIDES = {};
 let cmState = "idle";   /* idle | loading | done | fail */
 let cmInfo  = "";       /* 관리자 화면에 보여줄 연결 상태 */
 let cmFix   = "";       /* "" | reach | old | empty — 무엇을 고쳐야 하는지 */
 let cmRaw   = "";       /* 실제로 돌아온 응답 (진단용) */
+let urlMsg  = "";       /* 주소 테스트 결과 (재렌더에도 유지) */
 
 /* ---------------------------------------------------------------------
    Apps Script 읽기 — 브라우저 CORS 때문에 fetch 가 막히는 경우가 있어
    <script> 태그로 부르는 JSONP 를 먼저 쓰고, 실패하면 fetch 로 재시도합니다.
    --------------------------------------------------------------------- */
-function askScript(type, cb){
-  const url = (SUBMIT.appsScriptUrl || "").trim();
-  if(!url){ cb(null, "appsScriptUrl 이 비어 있습니다"); return; }
+function askScript(type, cb, overrideUrl){
+  const url = String(overrideUrl || SUBMIT.appsScriptUrl || "").trim();
+  if(!url){ cb(null, "주소가 비어 있습니다"); return; }
 
   const name = "fpcb_" + Math.random().toString(36).slice(2);
   const sep  = url.indexOf("?") < 0 ? "?" : "&";
@@ -2613,7 +2641,7 @@ function askScript(type, cb){
   tag.onerror = () => { if(!done){ cleanup(); fallback("스크립트를 불러오지 못했습니다"); } };
   document.head.appendChild(tag);
 
-  setTimeout(() => { if(!done){ cleanup(); fallback("응답이 없습니다 (시간 초과)"); } }, 8000);
+  setTimeout(() => { if(!done){ cleanup(); fallback("응답이 없습니다 (시간 초과)"); } }, 6000);
 }
 
 function applyOverrides(){
@@ -2743,7 +2771,26 @@ function renderAdmin(){
     return;
   }
   const ok = cmState === "done";
-  zone.innerHTML =
+  const cur = SUBMIT.appsScriptUrl || "";
+  const urlTool =
+    '<div class="urltool">' +
+      '<p class="urltool__t">Apps Script 주소 확인</p>' +
+      '<p class="small" style="margin:6px 0 12px">' +
+        "Apps Script 에서 <strong>배포 &gt; 배포 관리</strong> 를 열고, " +
+        "지금 살아 있는 배포의 <strong>웹 앱 URL</strong> 을 복사해 아래에 붙여넣고 테스트해 보세요. " +
+        "배포가 여러 개면 하나씩 넣어 보시면 됩니다." +
+      "</p>" +
+      '<form id="urlForm" novalidate>' +
+        '<div class="urltool__row">' +
+          '<input class="input" id="gsurl" type="url" spellcheck="false" ' +
+            'placeholder="https://script.google.com/macros/s/.../exec" value="' + esc(cur) + '">' +
+          '<button class="btn btn--accent" type="submit">테스트</button>' +
+        "</div>" +
+      "</form>" +
+      '<div id="urlResult">' + urlMsg + "</div>" +
+    "</div>";
+
+  zone.innerHTML = urlTool +
     '<div class="cmbar' + (cmState === "fail" ? " cmbar--bad" : "") + '" id="cmstatus">' +
       "<span>" + esc(cmInfo || "시트 연결 확인 전") + "</span>" +
       '<button class="btn btn--ghost btn--sm" id="cmReload" type="button">다시 불러오기</button>' +
@@ -3596,6 +3643,46 @@ document.addEventListener("submit", e => {
       $("#opw").value = "";
       $("#opw").focus();
     }
+    return;
+  }
+
+  /* ---------------- Apps Script 주소 테스트 ---------------- */
+  if(form.id === "urlForm"){
+    const box = $("#urlResult");
+    const v = $("#gsurl").value.trim();
+    if(!v){ box.innerHTML = '<p class="urlmsg urlmsg--bad">주소를 입력해 주세요.</p>'; return; }
+    urlMsg = '<p class="urlmsg">확인 중…</p>';
+    box.innerHTML = urlMsg;
+
+    askScript("courses", (d, err) => {
+      if(!d){
+        urlMsg = '<p class="urlmsg urlmsg--bad">이 주소에 연결하지 못했습니다.' +
+          (err ? " (" + esc(err) + ")" : "") + "</p>";
+        box.innerHTML = urlMsg;
+        return;
+      }
+      if(!d.items){
+        urlMsg =
+          '<p class="urlmsg urlmsg--bad">이 배포에는 <strong>예전 코드</strong>가 들어 있습니다. 다른 배포 주소로 다시 시도해 보세요.</p>' +
+          '<p class="urlmsg__raw mono">' + esc(JSON.stringify(d).slice(0, 200)) + "</p>";
+        box.innerHTML = urlMsg;
+        return;
+      }
+      /* 성공 — 이 브라우저에 저장하고 바로 적용 */
+      try { localStorage.setItem("fp_gs_url", v); } catch(e){}
+      SUBMIT.appsScriptUrl = v;
+      cmState = "idle";
+      urlMsg =
+        '<p class="urlmsg urlmsg--ok">이 주소가 맞습니다. 과정 ' + d.items.length + "개를 읽었습니다.</p>" +
+        '<p class="small" style="margin:10px 0 6px">이 브라우저에는 바로 적용했습니다. ' +
+          "<strong>모든 방문자에게 적용하려면</strong> index.html 에서 아래 한 줄을 찾아 주소만 바꾼 뒤 깃허브에 올려 주세요.</p>" +
+        '<div class="urltool__code">' +
+          '<code id="gsline">appsScriptUrl: "' + esc(v) + '",</code>' +
+          '<button class="btn btn--ghost btn--sm" type="button" data-copycode=\'appsScriptUrl: "' + esc(v) + '",\'>복사</button>' +
+        "</div>";
+      box.innerHTML = urlMsg;
+      loadCourseMaster(true);
+    }, v);
     return;
   }
 
