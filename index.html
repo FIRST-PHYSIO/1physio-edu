@@ -243,6 +243,18 @@ button{font:inherit;color:inherit}
 .postcard__top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .postcard__t{font-size:18px;font-weight:700;letter-spacing:-.03em;line-height:1.4;margin:12px 0 0}
 .postcard__s{font-size:14px;color:var(--ink-2);margin-top:8px;line-height:1.65}
+.postwrap{display:flex;flex-direction:column;min-width:0}
+.postwrap .postcard{flex:1}
+.ptools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.post .ptools{margin:0 0 16px}
+.ptools__ask{
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  font-size:12.5px;font-weight:600;color:var(--clay);
+}
+/* display 를 지정한 요소도 hidden 이면 확실히 숨깁니다 */
+[hidden]{display:none !important}
+.ptools__yes{background:var(--clay);color:#fff;border:1px solid var(--clay)}
+.ptools__yes:hover{background:#c0451f;border-color:#c0451f}
 .post{max-width:720px;margin:0 auto}
 .post p{font-size:15.5px;color:var(--ink-2);line-height:1.85;margin:0 0 16px}
 .post .lead{color:var(--ink)}
@@ -2288,7 +2300,10 @@ let LOCAL_POSTS = [];       /* 방금 이 브라우저에서 올린 글 (시트 
 let remoteState = "idle";   /* idle | loading | done | fail */
 
 function normalizePost(r){
-  if(!r || !r.slug || !r.title) return null;
+  if(!r || !r.slug) return null;
+  /* 삭제 표시된 글 — slug 만 들고 옵니다 */
+  if(r.status === "deleted") return { slug: String(r.slug), deleted: true };
+  if(!r.title) return null;
   const body = String(r.body == null ? "" : r.body).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const blocks = [];
   let bullets = null;
@@ -2314,6 +2329,7 @@ function normalizePost(r){
     courseSlug: r.courseSlug ? String(r.courseSlug) : "",
     password: r.password ? String(r.password) : "",
     summary: String(r.summary || ""),
+    raw: String(r.body == null ? "" : r.body),   /* 수정 화면에 그대로 되돌리기 위한 원문 */
     body: blocks.length ? blocks : [String(r.summary || "")]
   };
 }
@@ -2338,9 +2354,32 @@ function allPosts(){
   REMOTE_POSTS.forEach(p => { map[p.slug] = p; });   /* 같은 slug 면 시트 글 우선 */
   return Object.keys(map)
     .map(k => map[k])
-    .filter(p => p.visibility === "member" || p.visibility === "alumni");
+    .filter(p => !p.deleted && (p.visibility === "member" || p.visibility === "alumni"));
 }
 function postBySlug(s){ return allPosts().filter(p => p.slug === s)[0] || null; }
+
+/* 수정 화면에 넣을 본문 텍스트 — 시트 글은 원문 그대로, 내장 글은 되돌려 만듭니다 */
+function bodyToText(p){
+  if(p.raw != null) return p.raw;
+  return (p.body || []).map(b => {
+    if(typeof b === "string") return b;
+    if(b.h) return "## " + b.h;
+    if(b.list) return b.list.map(i => "- " + i).join("\n");
+    return "";
+  }).filter(Boolean).join("\n");
+}
+
+/* 운영자(글쓰기 암호 통과)에게만 보이는 수정·삭제 버튼 */
+function postTools(p, where){
+  if(!isWriter()) return "";
+  return '<div class="ptools">' +
+    '<a class="btn btn--ghost btn--sm" href="#/column/write?edit=' + encodeURIComponent(p.slug) + '" data-link>수정</a>' +
+    '<button class="btn btn--ghost btn--sm ptools__del" type="button" data-del="' + esc(p.slug) + '">삭제</button>' +
+    '<span class="ptools__ask" hidden>정말 삭제할까요? ' +
+      '<button class="btn btn--sm ptools__yes" type="button" data-delyes="' + esc(p.slug) + '">삭제</button> ' +
+      '<button class="btn btn--ghost btn--sm ptools__no" type="button">취소</button></span>' +
+  "</div>";
+}
 
 const VIS = {
   member: { label:"회원 공개", cls:"badge--soon" },
@@ -2360,7 +2399,8 @@ function ownerNote(){
 
 function postCard(p){
   const c = p.courseSlug ? byslug(p.courseSlug) : null;
-  return '<a class="card postcard" href="#/column/' + encodeURIComponent(p.slug) + '" data-link>' +
+  return '<div class="postwrap">' +
+    '<a class="card postcard" href="#/column/' + encodeURIComponent(p.slug) + '" data-link>' +
     '<div class="postcard__top">' + lockChip(p) +
       '<span class="mono" style="font-size:11.5px;color:var(--faint)">' + fdate(p.date, false) + "</span></div>" +
     '<h3 class="postcard__t">' + esc(p.title) + "</h3>" +
@@ -2368,7 +2408,8 @@ function postCard(p){
     '<div class="trackcard__tags" style="margin-top:12px">' +
       (c ? '<span class="tag">' + esc(c.name) + "</span>" : "") +
       p.tags.map(t => '<span class="tag">' + esc(t) + "</span>").join("") + "</div>" +
-  "</a>";
+    "</a>" + postTools(p, "list") +
+  "</div>";
 }
 
 const colFilters = { vis:"all", q:"" };
@@ -2471,6 +2512,7 @@ function viewPost(slug){
         '<span class="mono" style="font-size:11.5px;color:var(--faint)">' + fdate(p.date, false) +
         (p.author ? " · " + esc(p.author) : "") + "</span></div>" +
       '<h1 class="h-l" style="margin:0 0 12px">' + esc(p.title) + "</h1>" +
+      postTools(p, "detail") +
       '<p class="lead">' + esc(p.summary) + "</p>" +
       '<div class="trackcard__tags" style="margin:16px 0 28px">' +
         (c ? '<a class="tag" href="#/courses/' + c.slug + '" data-link style="text-decoration:none">' + esc(c.name) + "</a>" : "") +
@@ -2493,12 +2535,20 @@ function viewPost(slug){
 /* =====================================================================
    글쓰기 — 관리자 전용 (ADMIN_WRITE_PASSWORD). 공개 글쓰기·댓글 없음.
    ===================================================================== */
+let editSlug = "";   /* 비어 있으면 새 글, 값이 있으면 그 글 수정 */
+
 function viewWrite(){
+  const editing = !!editSlug;
   return '<section class="sec sec--flush fade"><div class="wrap">' +
-    '<p class="crumb" style="margin-bottom:22px"><a href="#/column" data-link>칼럼</a> <span style="color:var(--faint)">/</span> 글쓰기</p>' +
-    '<p class="eyebrow">Write</p>' +
-    '<h1 class="h-l" style="margin:10px 0 12px">칼럼 글쓰기</h1>' +
-    '<p class="sec__desc">운영자만 사용합니다. 저장하면 접수 시트의 <strong>칼럼</strong> 탭에 한 줄로 쌓이고, 칼럼 목록에 바로 올라갑니다.</p>' +
+    '<p class="crumb" style="margin-bottom:22px"><a href="#/column" data-link>칼럼</a> <span style="color:var(--faint)">/</span> ' +
+      (editing ? "글 수정" : "글쓰기") + "</p>" +
+    '<p class="eyebrow">' + (editing ? "Edit" : "Write") + "</p>" +
+    '<h1 class="h-l" style="margin:10px 0 12px">칼럼 ' + (editing ? "글 수정" : "글쓰기") + "</h1>" +
+    '<p class="sec__desc">' +
+      (editing
+        ? "저장하면 같은 글이 덮어써집니다. 공개 범위나 암호도 여기서 바꿀 수 있습니다."
+        : "운영자만 사용합니다. 저장하면 접수 시트의 <strong>칼럼</strong> 탭에 한 줄로 쌓이고, 칼럼 목록에 바로 올라갑니다.") +
+    "</p>" +
     '<div id="writezone" style="margin-top:28px"></div>' +
   "</div></section>";
 }
@@ -2529,44 +2579,58 @@ function renderWrite(){
     String(today.getMonth() + 1).padStart(2, "0") + "-" +
     String(today.getDate()).padStart(2, "0");
 
+  const ed = editSlug ? postBySlug(editSlug) : null;
+  if(editSlug && !ed){
+    zone.innerHTML = '<div class="notice">그 글을 찾지 못했습니다. ' +
+      '<a href="#/column" data-link>칼럼 목록</a> 으로 돌아가 주세요.</div>';
+    return;
+  }
+  const V = (k, d) => (ed && ed[k] != null && ed[k] !== "") ? ed[k] : (d || "");
+  const isAlumni = ed ? ed.visibility === "alumni" : false;
+
   zone.innerHTML =
-    '<form id="columnForm" novalidate class="form">' +
+    '<form id="columnForm" novalidate class="form" data-edit="' + esc(editSlug) + '">' +
       '<div class="field full"><label for="wtitle">제목 <span class="req">*</span></label>' +
-        '<input id="wtitle" name="wtitle" type="text" required>' +
+        '<input id="wtitle" name="wtitle" type="text" required value="' + esc(V("title")) + '">' +
         '<p class="err">제목을 입력해 주세요.</p></div>' +
 
       '<div class="field"><label for="wdate">날짜</label>' +
-        '<input id="wdate" name="wdate" type="date" value="' + iso + '"><p class="err"></p></div>' +
+        '<input id="wdate" name="wdate" type="date" value="' + esc(V("date", iso)) + '"><p class="err"></p></div>' +
 
       '<div class="field"><label for="wtags">태그 (쉼표로 구분)</label>' +
-        '<input id="wtags" name="wtags" type="text" placeholder="임상 근거, 공부법"><p class="err"></p></div>' +
+        '<input id="wtags" name="wtags" type="text" placeholder="임상 근거, 공부법" value="' +
+          esc(ed ? (ed.tags || []).join(", ") : "") + '"><p class="err"></p></div>' +
 
       '<div class="field full"><label for="wsummary">요약</label>' +
-        '<input id="wsummary" name="wsummary" type="text" placeholder="목록에 보일 한 줄"><p class="err"></p></div>' +
+        '<input id="wsummary" name="wsummary" type="text" placeholder="목록에 보일 한 줄" value="' +
+          esc(V("summary")) + '"><p class="err"></p></div>' +
 
       '<div class="field"><label for="wvis">공개 범위 <span class="req">*</span></label>' +
         '<select id="wvis" name="wvis" required>' +
-          '<option value="member">회원 공개</option>' +
-          '<option value="alumni">수강생 전용</option>' +
+          '<option value="member"' + (isAlumni ? "" : " selected") + ">회원 공개</option>" +
+          '<option value="alumni"' + (isAlumni ? " selected" : "") + ">수강생 전용</option>" +
         "</select><p class=\"err\">공개 범위를 선택해 주세요.</p></div>" +
 
-      '<div class="field" id="wcoursewrap" hidden><label for="wcourse">과정 <span class="req">*</span></label>' +
+      '<div class="field" id="wcoursewrap"' + (isAlumni ? "" : " hidden") + '><label for="wcourse">과정 <span class="req">*</span></label>' +
         '<select id="wcourse" name="wcourse">' +
           '<option value="">선택</option>' +
-          COURSES.map(c => '<option value="' + c.slug + '">' + esc(c.name) + "</option>").join("") +
+          COURSES.map(c => '<option value="' + c.slug + '"' +
+            (ed && ed.courseSlug === c.slug ? " selected" : "") + ">" + esc(c.name) + "</option>").join("") +
         "</select><p class=\"err\">과정을 선택해 주세요.</p></div>" +
 
       '<div class="field full"><label for="wpass">이 글 암호</label>' +
-        '<input id="wpass" name="wpass" type="text" autocomplete="off" placeholder="회원 공개는 비워두면 공통 암호를 씁니다">' +
+        '<input id="wpass" name="wpass" type="text" autocomplete="off" value="' + esc(V("password")) + '" placeholder="' +
+          (isAlumni ? "이 글 전용 암호 (필수)" : "회원 공개는 비워두면 공통 암호를 씁니다") + '">' +
         '<p class="hint" id="wpasshint" style="margin-top:5px">회원 공개: 비워두면 회원 공통 암호가 적용됩니다.</p>' +
         '<p class="err">수강생 전용 글은 암호가 필요합니다.</p></div>' +
 
       '<div class="field full"><label for="wbody">본문 <span class="req">*</span></label>' +
-        '<textarea id="wbody" name="wbody" required placeholder="한 줄 띄우면 문단이 나뉩니다.&#10;## 로 시작하면 소제목,&#10;- 로 시작하면 목록이 됩니다." style="min-height:280px"></textarea>' +
+        '<textarea id="wbody" name="wbody" required placeholder="한 줄 띄우면 문단이 나뉩니다.&#10;## 로 시작하면 소제목,&#10;- 로 시작하면 목록이 됩니다." style="min-height:280px">' +
+          (ed ? esc(bodyToText(ed)) : "") + "</textarea>" +
         '<p class="err">본문을 입력해 주세요.</p></div>' +
 
       '<div class="full" style="display:flex;gap:8px;flex-wrap:wrap">' +
-        '<button class="btn btn--accent" type="submit">저장하고 올리기</button>' +
+        '<button class="btn btn--accent" type="submit">' + (ed ? "수정 내용 저장" : "저장하고 올리기") + "</button>" +
         '<a class="btn btn--ghost" href="#/column" data-link>취소</a>' +
       "</div>" +
     "</form><div id=\"writeOk\"></div>";
@@ -3406,7 +3470,7 @@ function render(){
   else if(seg === "reviews"){ html = viewReviews(); current = "#/reviews"; }
   else if(seg === "gear"){ html = viewGear(); current = "#/gear"; }
   else if(seg === "archive"){ location.replace("#/column" + (parts[1] ? "/" + parts[1] : "")); return; }
-  else if(seg === "column" && parts[1] === "write"){ html = viewWrite(); current = "#/column/write"; }
+  else if(seg === "column" && parts[1] === "write"){ editSlug = q.get("edit") || ""; html = viewWrite(); current = "#/column/write"; }
   else if(seg === "column" && parts[1]){ html = viewPost(decodeURIComponent(parts[1])); current = "#/column"; }
   else if(seg === "column"){ html = viewColumn(); current = "#/column"; }
   else if(seg === "admin" && parts[1] === "courses"){ html = viewAdminCourses(); }
@@ -3596,6 +3660,46 @@ document.addEventListener("click", e => {
     document.body.removeChild(ta);
     const t = cp.textContent; cp.textContent = "복사됨";
     setTimeout(() => { cp.textContent = t; }, 1600);
+    return;
+  }
+
+  /* ---------------- 칼럼 글 삭제 (2단계 확인) ---------------- */
+  const delBtn = e.target.closest("[data-del]");
+  if(delBtn){
+    const wrap = delBtn.parentNode;
+    delBtn.hidden = true;
+    const prev = delBtn.previousElementSibling;
+    if(prev) prev.hidden = true;
+    wrap.querySelector(".ptools__ask").hidden = false;
+    return;
+  }
+  if(e.target.closest(".ptools__no")){
+    const wrap = e.target.closest(".ptools");
+    wrap.querySelectorAll("a,button").forEach(el => { el.hidden = false; });
+    wrap.querySelector(".ptools__ask").hidden = true;
+    return;
+  }
+  const delYes = e.target.closest("[data-delyes]");
+  if(delYes){
+    const slug = delYes.dataset.delyes;
+    const post = postBySlug(slug);
+    delYes.disabled = true;
+    delYes.textContent = "삭제 중…";
+    sendApplication({
+      유형: "칼럼삭제",
+      slug: slug,
+      제목: post ? post.title : slug,
+      접수시각: new Date().toLocaleString("ko-KR")
+    }).then(() => {
+      /* 화면에서 즉시 감춥니다. 시트에는 상태만 deleted 로 남습니다 */
+      LOCAL_POSTS = LOCAL_POSTS.filter(x => x.slug !== slug).concat([{ slug: slug, deleted: true }]);
+      REMOTE_POSTS = REMOTE_POSTS.filter(x => x.slug !== slug);
+      if(location.hash.indexOf("#/column/") === 0) location.hash = "#/column";
+      else { renderColumn(); }
+    }).catch(() => {
+      delYes.disabled = false;
+      delYes.textContent = "삭제";
+    });
     return;
   }
 
@@ -3863,9 +3967,10 @@ document.addEventListener("submit", e => {
     mark("wpass", vis === "alumni" && !pass);
     if(bad){ $(".field.is-bad").scrollIntoView({ behavior:"smooth", block:"center" }); return; }
 
-    const slug = makeSlug();
+    const editing = form.dataset.edit || "";
+    const slug = editing || makeSlug();
     const payload = {
-      유형: "칼럼작성",
+      유형: editing ? "칼럼수정" : "칼럼작성",
       slug: slug,
       제목: title,
       날짜: $("#wdate").value || "",
@@ -3888,11 +3993,13 @@ document.addEventListener("submit", e => {
         summary: payload.요약, visibility: vis, courseSlug: payload.courseSlug,
         password: payload.password, body: body
       });
-      if(local) LOCAL_POSTS = LOCAL_POSTS.concat([local]);
+      if(local) LOCAL_POSTS = LOCAL_POSTS.filter(x => x.slug !== slug).concat([local]);
+      if(editing) REMOTE_POSTS = REMOTE_POSTS.filter(x => x.slug !== slug);
+      editSlug = "";
       colFilters.vis = "all"; colFilters.q = "";
       location.hash = "#/column";
     }).catch(() => {
-      if(wbtn){ wbtn.disabled = false; wbtn.textContent = "저장하고 올리기"; }
+      if(wbtn){ wbtn.disabled = false; wbtn.textContent = editing ? "수정 내용 저장" : "저장하고 올리기"; }
       $("#writeOk").innerHTML =
         '<div class="notice" style="margin-top:16px;border-color:var(--clay);color:var(--clay)">' +
           "저장 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.</div>";
