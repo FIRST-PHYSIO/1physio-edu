@@ -255,6 +255,34 @@ button{font:inherit;color:inherit}
 [hidden]{display:none !important}
 .ptools__yes{background:var(--clay);color:#fff;border:1px solid var(--clay)}
 .ptools__yes:hover{background:#c0451f;border-color:#c0451f}
+/* 글쓰기 서식 툴바 */
+.wtool{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.wtool__b{
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  border-radius:var(--r-sm);padding:6px 11px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;
+}
+.wtool__b:hover{border-color:var(--line-strong);background:var(--surface-2)}
+.wtool__b:disabled{opacity:.5;cursor:default}
+.wtool__b--go{color:var(--accent-2);border-color:var(--accent-soft);background:var(--accent-soft)}
+.wtool__sep{width:1px;height:20px;background:var(--line);margin:0 2px}
+.wtool__msg{font-size:12.5px;color:var(--accent-2);font-weight:600;margin:8px 0 0}
+.wtool__msg.is-bad{color:var(--clay)}
+
+/* 본문 안의 사진·인용 */
+.post__fig{margin:26px 0;text-align:center}
+.post__fig img{width:100%;height:auto;border-radius:var(--r-sm);border:1px solid var(--line);display:block}
+.post__fig figcaption{font-size:12.5px;color:var(--muted);margin-top:9px}
+.post__img{max-width:100%;height:auto;border-radius:var(--r-sm);vertical-align:middle}
+.post__q{
+  margin:22px 0;padding:14px 18px;border-left:3px solid var(--accent);
+  background:var(--surface-2);border-radius:0 var(--r-sm) var(--r-sm) 0;
+  font-size:15px;color:var(--ink-2);line-height:1.8;
+}
+.post__q p{margin:0}
+.post strong{font-weight:700;color:var(--ink)}
+.post em{font-style:italic}
+.post a{color:var(--accent-2)}
+
 .post{max-width:720px;margin:0 auto}
 .post p{font-size:15.5px;color:var(--ink-2);line-height:1.85;margin:0 0 16px}
 .post .lead{color:var(--ink)}
@@ -2296,28 +2324,95 @@ function tryUnlock(p, input){
    시트에 저장된 글 불러오기 — 실패해도 내장 POSTS 로 그대로 동작합니다
    --------------------------------------------------------------------- */
 let REMOTE_POSTS = [];      /* 시트에서 불러온 글 */
-let LOCAL_POSTS = [];       /* 방금 이 브라우저에서 올린 글 (시트 반영 전까지) */
 let remoteState = "idle";   /* idle | loading | done | fail */
+let colSyncMsg = "";        /* 시트 반영이 안 됐을 때 운영자에게 보여줄 안내 */
+
+/* 방금 이 브라우저에서 쓰거나 고치거나 지운 글.
+   새로고침해도 남도록 저장해 두고, 시트가 같은 상태가 되면 스스로 지웁니다. */
+const LOCAL_KEY = "fp_col_local";
+let LOCAL_POSTS = (function(){
+  try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]") || []; }
+  catch(e){ return []; }
+})();
+function saveLocalPosts(){
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(LOCAL_POSTS)); } catch(e){}
+}
+function putLocal(p){
+  LOCAL_POSTS = LOCAL_POSTS.filter(x => x.slug !== p.slug).concat([p]);
+  saveLocalPosts();
+}
+/* 시트가 내 변경을 따라잡았으면 그 임시 기록을 버립니다 */
+function reconcileLocal(){
+  const remote = {};
+  REMOTE_POSTS.forEach(r => { remote[r.slug] = r; });
+  const before = LOCAL_POSTS.length;
+  LOCAL_POSTS = LOCAL_POSTS.filter(l => {
+    const r = remote[l.slug];
+    if(!r) return true;                                   /* 시트에 아직 없음 */
+    if(l.deleted) return !r.deleted;                      /* 삭제가 반영됐으면 버림 */
+    if(r.deleted) return true;
+    return !(r.title === l.title && (r.raw || "") === (l.raw || ""));
+  });
+  if(LOCAL_POSTS.length !== before) saveLocalPosts();
+}
+
+/* ---------------------------------------------------------------------
+   본문 서식
+     **굵게**            → 굵은 글씨
+     *기울임*            → 기울임
+     ## 소제목
+     - 목록
+     > 인용
+     ![설명](사진주소)    → 사진
+     [글자](주소)         → 링크
+   --------------------------------------------------------------------- */
+const RE_URL = /^https?:\/\/[^\s)]+$/;
+
+function inlineFmt(t){
+  let x = esc(t);                                   /* 먼저 HTML 을 막고 */
+  x = x.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+    (m, a, u) => '<img class="post__img" src="' + u + '" alt="' + a + '" loading="lazy">');
+  x = x.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    (m, a, u) => '<a href="' + u + '" target="_blank" rel="noopener">' + a + "</a>");
+  x = x.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  x = x.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>");
+  return x;
+}
+
+function textToBlocks(txt){
+  const lines = String(txt || "").split(/\r?\n/).map(l => l.trim());
+  const blocks = [];
+  let bullets = null;
+  const flush = () => { if(bullets){ blocks.push({ list: bullets }); bullets = null; } };
+
+  lines.forEach(line => {
+    if(!line){ flush(); return; }
+
+    if(/^[-·*]\s+/.test(line)){
+      bullets = bullets || [];
+      bullets.push(line.replace(/^[-·*]\s+/, ""));
+      return;
+    }
+    flush();
+
+    /* 그 줄 전체가 사진 하나면 큰 사진으로 */
+    const img = line.match(/^!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)$/);
+    if(img){ blocks.push({ img: img[2], cap: img[1] }); return; }
+
+    if(/^#{1,3}\s+/.test(line)) blocks.push({ h: line.replace(/^#{1,3}\s+/, "") });
+    else if(/^>\s?/.test(line)) blocks.push({ quote: line.replace(/^>\s?/, "") });
+    else blocks.push(line);
+  });
+  flush();
+  return blocks;
+}
 
 function normalizePost(r){
   if(!r || !r.slug) return null;
   /* 삭제 표시된 글 — slug 만 들고 옵니다 */
   if(r.status === "deleted") return { slug: String(r.slug), deleted: true };
   if(!r.title) return null;
-  const body = String(r.body == null ? "" : r.body).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const blocks = [];
-  let bullets = null;
-  body.forEach(line => {
-    if(/^[-·*]\s+/.test(line)){
-      bullets = bullets || [];
-      bullets.push(line.replace(/^[-·*]\s+/, ""));
-      return;
-    }
-    if(bullets){ blocks.push({ list: bullets }); bullets = null; }
-    if(/^#{1,3}\s+/.test(line)) blocks.push({ h: line.replace(/^#{1,3}\s+/, "") });
-    else blocks.push(line);
-  });
-  if(bullets) blocks.push({ list: bullets });
+  const blocks = textToBlocks(String(r.body == null ? "" : r.body));
 
   return {
     slug: String(r.slug),
@@ -2342,7 +2437,16 @@ function loadRemotePosts(){
     if(!rows){ remoteState = "fail"; return; }
     REMOTE_POSTS = rows.map(normalizePost).filter(Boolean);
     remoteState = "done";
-    if(location.hash.indexOf("#/column") === 0 && !location.hash.split("/")[2]) renderColumn();
+    reconcileLocal();
+    colSyncMsg = (isWriter() && LOCAL_POSTS.length)
+      ? LOCAL_POSTS.length + "건이 아직 시트에 반영되지 않았습니다. " +
+        "이 브라우저에서는 바로 보이지만 다른 사람 화면에는 예전 내용이 보입니다. " +
+        "Apps Script 를 최신 Code.gs 로 다시 배포했는지 확인해 주세요."
+      : "";
+    if(location.hash.indexOf("#/column") !== 0) return;
+    const sub = location.hash.split("/")[2];
+    if(!sub) renderColumn();
+    else render();          /* 상세·수정 화면은 다시 그려야 글이 나타납니다 */
   });
 }
 
@@ -2350,8 +2454,8 @@ function loadRemotePosts(){
 function allPosts(){
   const map = {};
   POSTS.forEach(p => { map[p.slug] = p; });
-  LOCAL_POSTS.forEach(p => { map[p.slug] = p; });
-  REMOTE_POSTS.forEach(p => { map[p.slug] = p; });   /* 같은 slug 면 시트 글 우선 */
+  REMOTE_POSTS.forEach(p => { map[p.slug] = p; });   /* 시트 글이 내장 글을 덮어씀 */
+  LOCAL_POSTS.forEach(p => { map[p.slug] = p; });    /* 방금 내가 한 변경이 가장 위 */
   return Object.keys(map)
     .map(k => map[k])
     .filter(p => !p.deleted && (p.visibility === "member" || p.visibility === "alumni"));
@@ -2364,6 +2468,8 @@ function bodyToText(p){
   return (p.body || []).map(b => {
     if(typeof b === "string") return b;
     if(b.h) return "## " + b.h;
+    if(b.quote) return "> " + b.quote;
+    if(b.img) return "![" + (b.cap || "") + "](" + b.img + ")";
     if(b.list) return b.list.map(i => "- " + i).join("\n");
     return "";
   }).filter(Boolean).join("\n");
@@ -2458,6 +2564,8 @@ function renderColumn(){
       [["all", "전체"], ["member", "회원 공개"], ["alumni", "수강생 전용"]].map(([k, l]) =>
         '<button class="chip" data-cvis="' + k + '" aria-pressed="' + (colFilters.vis === k) + '">' + l + "</button>").join("") +
     "</div>" +
+    (colSyncMsg ? '<div class="notice" style="margin-bottom:16px;border-color:var(--clay);color:var(--clay)">' +
+      esc(colSyncMsg) + "</div>" : "") +
     '<p class="small" style="margin-bottom:14px">' + list.length + "개의 글" +
       (remoteState === "loading" ? " · 불러오는 중…" : "") + "</p>" +
     (list.length ? '<div class="posts">' + list.map(postCard).join("") + "</div>"
@@ -2491,16 +2599,26 @@ function gateBox(p){
 
 function postBody(p){
   return p.body.map(b => {
-    if(typeof b === "string") return "<p>" + esc(b) + "</p>";
+    if(typeof b === "string") return "<p>" + inlineFmt(b) + "</p>";
     if(b.h) return '<h2 class="h-m" style="margin:32px 0 10px">' + esc(b.h) + "</h2>";
-    if(b.list) return "<ul class=\"ul\">" + b.list.map(i => "<li>" + esc(i) + "</li>").join("") + "</ul>";
+    if(b.quote) return '<blockquote class="post__q">' + inlineFmt(b.quote) + "</blockquote>";
+    if(b.img) return '<figure class="post__fig">' +
+      '<img src="' + esc(b.img) + '" alt="' + esc(b.cap || "") + '" loading="lazy">' +
+      (b.cap ? '<figcaption>' + esc(b.cap) + "</figcaption>" : "") + "</figure>";
+    if(b.list) return "<ul class=\"ul\">" + b.list.map(i => "<li>" + inlineFmt(i) + "</li>").join("") + "</ul>";
     return "";
   }).join("");
 }
 
 function viewPost(slug){
   const p = postBySlug(slug);
-  if(!p) return notFound();
+  if(!p){
+    /* 시트에서 아직 불러오는 중일 수 있습니다 */
+    if(remoteState === "idle" || remoteState === "loading"){
+      return '<div class="wrap fade"><div class="notice" style="margin-top:40px">글을 불러오는 중입니다…</div></div>';
+    }
+    return notFound();
+  }
   const c = p.courseSlug ? byslug(p.courseSlug) : null;
   const open = isUnlocked(p);
 
@@ -2581,8 +2699,10 @@ function renderWrite(){
 
   const ed = editSlug ? postBySlug(editSlug) : null;
   if(editSlug && !ed){
-    zone.innerHTML = '<div class="notice">그 글을 찾지 못했습니다. ' +
-      '<a href="#/column" data-link>칼럼 목록</a> 으로 돌아가 주세요.</div>';
+    zone.innerHTML = (remoteState === "idle" || remoteState === "loading")
+      ? '<div class="notice">글을 불러오는 중입니다…</div>'
+      : '<div class="notice">그 글을 찾지 못했습니다. ' +
+        '<a href="#/column" data-link>칼럼 목록</a> 으로 돌아가 주세요.</div>';
     return;
   }
   const V = (k, d) => (ed && ed[k] != null && ed[k] !== "") ? ed[k] : (d || "");
@@ -2625,15 +2745,102 @@ function renderWrite(){
         '<p class="err">수강생 전용 글은 암호가 필요합니다.</p></div>' +
 
       '<div class="field full"><label for="wbody">본문 <span class="req">*</span></label>' +
+        '<div class="wtool">' +
+          '<button class="wtool__b" type="button" data-fmt="bold" title="굵게"><strong>B</strong></button>' +
+          '<button class="wtool__b" type="button" data-fmt="italic" title="기울임"><em>I</em></button>' +
+          '<button class="wtool__b" type="button" data-fmt="h">소제목</button>' +
+          '<button class="wtool__b" type="button" data-fmt="li">목록</button>' +
+          '<button class="wtool__b" type="button" data-fmt="quote">인용</button>' +
+          '<button class="wtool__b" type="button" data-fmt="link">링크</button>' +
+          '<span class="wtool__sep"></span>' +
+          '<button class="wtool__b wtool__b--go" type="button" id="imgPick">사진 넣기</button>' +
+          '<button class="wtool__b" type="button" id="imgUrl">사진 주소로 넣기</button>' +
+          '<input type="file" id="imgFile" accept="image/*" hidden>' +
+        "</div>" +
+        '<p class="wtool__msg" id="imgMsg" hidden></p>' +
         '<textarea id="wbody" name="wbody" required placeholder="한 줄 띄우면 문단이 나뉩니다.&#10;## 로 시작하면 소제목,&#10;- 로 시작하면 목록이 됩니다." style="min-height:280px">' +
           (ed ? esc(bodyToText(ed)) : "") + "</textarea>" +
-        '<p class="err">본문을 입력해 주세요.</p></div>' +
+        '<p class="err">본문을 입력해 주세요.</p>' +
+        '<p class="hint" style="margin-top:6px">' +
+          "<strong>**굵게**</strong> · <em>*기울임*</em> · <code>## 소제목</code> · " +
+          "<code>- 목록</code> · <code>&gt; 인용</code> · <code>![설명](사진주소)</code>" +
+        "</p></div>" +
 
       '<div class="full" style="display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="btn btn--accent" type="submit">' + (ed ? "수정 내용 저장" : "저장하고 올리기") + "</button>" +
         '<a class="btn btn--ghost" href="#/column" data-link>취소</a>' +
       "</div>" +
     "</form><div id=\"writeOk\"></div>";
+}
+
+/* 커서 위치에 넣거나, 선택한 글자를 감쌉니다 */
+function wrapSel(ta, pre, post, ph){
+  const a = ta.selectionStart, b = ta.selectionEnd;
+  const sel = ta.value.slice(a, b) || (ph || "");
+  ta.value = ta.value.slice(0, a) + pre + sel + post + ta.value.slice(b);
+  ta.focus();
+  ta.setSelectionRange(a + pre.length, a + pre.length + sel.length);
+}
+function prefixLine(ta, mark){
+  const a = ta.selectionStart;
+  const start = ta.value.lastIndexOf("\n", a - 1) + 1;
+  ta.value = ta.value.slice(0, start) + mark + ta.value.slice(start);
+  ta.focus();
+  ta.setSelectionRange(a + mark.length, a + mark.length);
+}
+function insertAt(ta, text){
+  const a = ta.selectionStart, b = ta.selectionEnd;
+  const nl = (a > 0 && ta.value[a - 1] !== "\n") ? "\n" : "";
+  ta.value = ta.value.slice(0, a) + nl + text + "\n" + ta.value.slice(b);
+  ta.focus();
+  const at = a + nl.length + text.length + 1;
+  ta.setSelectionRange(at, at);
+}
+function imgMsg(t, bad){
+  const el = $("#imgMsg");
+  if(!el) return;
+  el.hidden = !t;
+  el.textContent = t || "";
+  el.classList.toggle("is-bad", !!bad);
+}
+
+/* 사진을 가로 1400px 안으로 줄여 용량을 낮춘 뒤 올립니다 */
+function shrinkImage(file){
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error("파일을 읽지 못했습니다"));
+    fr.onload = () => {
+      const im = new Image();
+      im.onerror = () => reject(new Error("이미지를 열지 못했습니다"));
+      im.onload = () => {
+        const max = 1400;
+        let w = im.width, h = im.height;
+        if(w > max){ h = Math.round(h * max / w); w = max; }
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(im, 0, 0, w, h);
+        resolve(cv.toDataURL("image/jpeg", 0.82));
+      };
+      im.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* 업로드 후 주소를 되받아 옵니다 (no-cors 라 응답을 못 읽어 되물어봅니다) */
+function waitImageUrl(imgId, tries){
+  return new Promise(resolve => {
+    let n = 0;
+    const ask = () => {
+      n += 1;
+      askScript("image&id=" + encodeURIComponent(imgId), d => {
+        if(d && d.url){ resolve(d.url); return; }
+        if(n >= (tries || 10)){ resolve(""); return; }
+        setTimeout(ask, 1800);
+      });
+    };
+    setTimeout(ask, 1800);
+  });
 }
 
 function makeSlug(){
@@ -2695,8 +2902,7 @@ function askScript(type, cb, overrideUrl){
   };
   const fallback = err => {
     /* JSONP 실패 → 일반 fetch 로 한 번 더 */
-    fetch(url + sep + "type=" + encodeURIComponent(type) + bust,
-          { method:"GET", cache:"no-store" })
+    fetch(url + sep + "type=" + type + bust, { method:"GET", cache:"no-store" })
       .then(r => r.json())
       .then(d => cb(d, ""))
       .catch(e => cb(null, err || String(e)));
@@ -2704,7 +2910,7 @@ function askScript(type, cb, overrideUrl){
 
   window[name] = data => { done = true; cleanup(); cb(data, ""); };
   tag.referrerPolicy = "no-referrer-when-downgrade";
-  tag.src = url + sep + "type=" + encodeURIComponent(type) + "&callback=" + name + bust;
+  tag.src = url + sep + "type=" + type + "&callback=" + name + bust;
   tag.onerror = () => { if(!done){ cleanup(); fallback("스크립트를 불러오지 못했습니다"); } };
   document.head.appendChild(tag);
 
@@ -3485,7 +3691,8 @@ function render(){
   if(seg === "courses" && !parts[1]){ renderFilters(); renderResults(); }
   if(seg === "schedule") renderSchedule();
   if(seg === "reviews") renderReviews();
-  if(seg === "column" && !parts[1]){ renderColumn(); loadRemotePosts(); }
+  if(seg === "column" && !parts[1]) renderColumn();
+  if(seg === "column") loadRemotePosts();   /* 상세·글쓰기로 바로 들어와도 시트 글을 불러옵니다 */
   loadCourseMaster();   /* 시트에 저장된 일정·가격이 있으면 덮어씁니다 (1회) */
   if(seg === "column" && parts[1] === "write") renderWrite();
   if(seg === "admin" && parts[1] === "courses") renderAdmin();
@@ -3663,6 +3870,32 @@ document.addEventListener("click", e => {
     return;
   }
 
+  /* ---------------- 글쓰기 서식 버튼 ---------------- */
+  const fmt = e.target.closest("[data-fmt]");
+  if(fmt){
+    const ta = $("#wbody");
+    if(!ta) return;
+    const k = fmt.dataset.fmt;
+    if(k === "bold")   wrapSel(ta, "**", "**", "굵게 쓸 내용");
+    if(k === "italic") wrapSel(ta, "*", "*", "기울일 내용");
+    if(k === "h")      prefixLine(ta, "## ");
+    if(k === "li")     prefixLine(ta, "- ");
+    if(k === "quote")  prefixLine(ta, "> ");
+    if(k === "link"){
+      const u = prompt("링크 주소를 붙여넣어 주세요", "https://");
+      if(u && /^https?:\/\//.test(u)) wrapSel(ta, "[", "](" + u + ")", "링크 글자");
+    }
+    return;
+  }
+
+  if(e.target.closest("#imgPick")){ $("#imgFile").click(); return; }
+
+  if(e.target.closest("#imgUrl")){
+    const u = prompt("사진 주소(https://…)를 붙여넣어 주세요", "https://");
+    if(u && /^https?:\/\//.test(u)) insertAt($("#wbody"), "![](" + u + ")");
+    return;
+  }
+
   /* ---------------- 칼럼 글 삭제 (2단계 확인) ---------------- */
   const delBtn = e.target.closest("[data-del]");
   if(delBtn){
@@ -3692,10 +3925,11 @@ document.addEventListener("click", e => {
       접수시각: new Date().toLocaleString("ko-KR")
     }).then(() => {
       /* 화면에서 즉시 감춥니다. 시트에는 상태만 deleted 로 남습니다 */
-      LOCAL_POSTS = LOCAL_POSTS.filter(x => x.slug !== slug).concat([{ slug: slug, deleted: true }]);
-      REMOTE_POSTS = REMOTE_POSTS.filter(x => x.slug !== slug);
+      putLocal({ slug: slug, deleted: true });
+      remoteState = "idle";
+      setTimeout(() => loadRemotePosts(), 2500);   /* 시트에 실제로 들어갔는지 확인 */
       if(location.hash.indexOf("#/column/") === 0) location.hash = "#/column";
-      else { renderColumn(); }
+      else renderColumn();
     }).catch(() => {
       delYes.disabled = false;
       delYes.textContent = "삭제";
@@ -3772,6 +4006,38 @@ document.addEventListener("input", e => {
 });
 
 document.addEventListener("change", e => {
+  if(e.target.id === "imgFile"){
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if(!file) return;
+    if(!/^image\//.test(file.type)){ imgMsg("이미지 파일만 올릴 수 있습니다.", true); return; }
+
+    const btn = $("#imgPick");
+    if(btn){ btn.disabled = true; btn.textContent = "올리는 중…"; }
+    imgMsg("사진을 줄여서 올리는 중입니다. 10~20초 정도 걸립니다.");
+
+    const imgId = "img" + Date.now().toString(36) + Math.floor(Math.random() * 1000);
+    shrinkImage(file)
+      .then(dataUrl => sendApplication({
+        유형: "이미지업로드", imgId: imgId, 파일명: file.name, data: dataUrl,
+        접수시각: new Date().toLocaleString("ko-KR")
+      }).then(() => waitImageUrl(imgId)))
+      .then(url => {
+        if(btn){ btn.disabled = false; btn.textContent = "사진 넣기"; }
+        if(url){
+          insertAt($("#wbody"), "![](" + url + ")");
+          imgMsg("사진을 넣었습니다. 미리보기로 확인해 보세요.");
+        } else {
+          imgMsg("올리기는 됐는데 주소를 받지 못했습니다. 잠시 뒤 다시 시도하거나 사진 주소로 넣어 주세요.", true);
+        }
+      })
+      .catch(err => {
+        if(btn){ btn.disabled = false; btn.textContent = "사진 넣기"; }
+        imgMsg("사진을 올리지 못했습니다. " + (err && err.message ? err.message : ""), true);
+      });
+    return;
+  }
+
   if(e.target.id === "region"){ filters.region = e.target.value; renderResults(); }
   if(e.target.id === "acourse") renderApplySummary();
   if(e.target.id === "wvis"){
@@ -3993,9 +4259,10 @@ document.addEventListener("submit", e => {
         summary: payload.요약, visibility: vis, courseSlug: payload.courseSlug,
         password: payload.password, body: body
       });
-      if(local) LOCAL_POSTS = LOCAL_POSTS.filter(x => x.slug !== slug).concat([local]);
-      if(editing) REMOTE_POSTS = REMOTE_POSTS.filter(x => x.slug !== slug);
+      if(local) putLocal(local);
       editSlug = "";
+      remoteState = "idle";
+      setTimeout(() => loadRemotePosts(), 2500);   /* 시트에 실제로 들어갔는지 확인 */
       colFilters.vis = "all"; colFilters.q = "";
       location.hash = "#/column";
     }).catch(() => {
