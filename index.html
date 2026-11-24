@@ -974,13 +974,13 @@ const DEFAULT_FAQ = [
 const COURSES = [
   /* ---------------- PHYSIO EDU ---------------- */
   {
-    slug:"emp", track:"edu", order:1, sessions:["2026-11-29","2026-12-06","2026-12-13"], cat:"근골격계", status:"open",
+    slug:"emp", track:"edu", order:1, sessions:["2027-01-10","2027-01-24","2027-01-31"], cat:"근골격계", status:"open",
     name:"근골격계 운동치료", abbr:"EMP",
     tagline:"허리, 목·어깨, 무릎·발목. 세 번의 일요일 동안 주요 부위를 하나씩 다룹니다.",
     audience:["물리치료사","의사","트레이너"],
     format:"오프라인", online:false, place:"오송 퍼스트피지오 짐",
     cohort:"19기", capacity:16, price:650000,
-    applyFrom:"2026-09-01", applyTo:"2026-11-22", start:"2026-11-29", end:"2026-12-13",
+    applyFrom:"2026-09-01", applyTo:"2026-11-22", start:"2027-01-10", end:"2027-01-31",
     hours:"일요일 3회 · 회당 8시간 (총 24시간)", rating:9.9, reviews:22, instructor:"홍웅표", instructorSlug:"hong",
     schedule:[
       { day:"1주차", theme:"허리 · 엉덩관절", rows:[
@@ -2950,6 +2950,16 @@ function askScript(type, cb, overrideUrl){
   setTimeout(() => { if(!done){ cleanup(); fallback("응답이 없습니다 (시간 초과)"); } }, 6000);
 }
 
+function parseSessions(v){
+  if(v == null || v === "") return [];
+  const arr = Array.isArray(v) ? v : String(v).split(/[,\s·\/]+/);
+  return arr.map(x => {
+    if(x instanceof Date) return x.toISOString().slice(0, 10);
+    const m = String(x).trim().match(/^(\d{4})[-.](\d{1,2})[-.](\d{1,2})/);
+    return m ? m[1] + "-" + m[2].padStart(2, "0") + "-" + m[3].padStart(2, "0") : "";
+  }).filter(Boolean).sort();
+}
+
 function applyOverrides(){
   COURSES.forEach(c => {
     /* index.html 에 박아 둔 확정값 → 시트 값 순으로 덮어씁니다 */
@@ -2961,7 +2971,14 @@ function applyOverrides(){
     if(o.capacity) c.capacity = Number(o.capacity) || c.capacity;
     if(o.price !== "" && o.price != null && !isNaN(Number(o.price))) c.price = Number(o.price);
     if(o.earlybird !== "" && o.earlybird != null) c.earlybird = String(o.earlybird) === "on";
-    if(o.start){
+    /* 회차 날짜 — "2027-01-10, 2027-01-24, 2027-01-31" 처럼 쉼표로 구분. 있으면 개강·종료일보다 우선 */
+    const ses = parseSessions(o.sessions != null ? o.sessions : o["회차"]);
+    if(ses.length){
+      c.sessions = ses;
+      c.start = ses[0];
+      c.end = ses[ses.length - 1];
+      c.dateNote = "";
+    } else if(o.start){
       const st = String(o.start).slice(0, 10);
       /* 회차 일정(sessions)이 있는 과정은 첫 회차가 바뀌면 회차를 비웁니다 */
       if(c.sessions && c.sessions[0] !== st) delete c.sessions;
@@ -3047,6 +3064,8 @@ function adminRow(c){
       "</select></label>" +
       '<label>개강일<input class="input" name="start" type="date" value="' + (c.dateNote ? "" : esc(c.start || "")) + '"></label>' +
       '<label>종료일<input class="input" name="end" type="date" value="' + (c.dateNote ? "" : esc(c.end || "")) + '"></label>' +
+      '<label class="afull">회차 날짜 <span style="font-weight:400;color:var(--faint)">(띄엄띄엄 진행할 때 · 쉼표로 구분 · 비우면 개강~종료일로 표시)</span>' +
+        '<input class="input" name="sessions" type="text" placeholder="2027-01-10, 2027-01-24, 2027-01-31" value="' + esc(c.sessions ? c.sessions.join(", ") : "") + '"></label>' +
       '<label class="afull">장소<input class="input" name="place" type="text" value="' + esc(c.place) + '"></label>' +
       '<label>정원<input class="input" name="capacity" type="number" min="1" value="' + esc(c.capacity) + '"></label>' +
       '<label>정가 (원)<input class="input" name="price" type="number" min="0" step="1000" value="' + esc(c.price == null ? "" : c.price) + '"></label>' +
@@ -3988,6 +4007,7 @@ document.addEventListener("click", e => {
         status: c.status,
         start: c.dateNote ? "" : (c.start || ""),
         end: c.dateNote ? "" : (c.end || ""),
+        sessions: c.sessions ? c.sessions.join(", ") : "",
         place: c.place,
         capacity: String(c.capacity),
         price: String(c.price == null ? "" : c.price),
@@ -4214,6 +4234,7 @@ document.addEventListener("submit", e => {
       상태: g("status"),
       개강일: g("start"),
       종료일: g("end"),
+      회차: parseSessions(g("sessions")).join(", "),
       장소: g("place"),
       정원: g("capacity"),
       정가: g("price"),
@@ -4227,7 +4248,7 @@ document.addEventListener("submit", e => {
     sendApplication(payload).then(() => {
       COURSE_OVERRIDES[slug] = {
         slug: slug, cohort: payload.기수, status: payload.상태,
-        start: payload.개강일, end: payload.종료일, place: payload.장소,
+        start: payload.개강일, end: payload.종료일, sessions: payload.회차, place: payload.장소,
         capacity: payload.정원, price: payload.정가, earlybird: payload.얼리버드
       };
       applyOverrides();
